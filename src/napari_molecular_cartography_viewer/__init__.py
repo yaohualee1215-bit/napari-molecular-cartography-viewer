@@ -1,26 +1,9 @@
-try:
-    from ._version import version as __version__
-except ImportError:
-    __version__ = "unknown"
+from ._version import __version__
 
+# Export the napari widget factory referenced in napari.yaml
+from ._widget import make_molecular_cartography_viewer_widget
 
-from ._reader import napari_get_reader
-from ._sample_data import make_sample_data
-from ._widget import (
-    ExampleQWidget,
-    ImageThreshold,
-    threshold_autogenerate_widget,
-    threshold_magic_widget,
-)
-from ._writer import write_multiple, write_single_image
-
-__all__ = (
-    "napari_get_reader",
-    "write_single_image",
-    "write_multiple",
-    "make_sample_data",
-    "ExampleQWidget",
-    "ImageThreshold",
-    "threshold_autogenerate_widget",
-    "threshold_magic_widget",
-)
+__all__ = [
+    "__version__",
+    "make_molecular_cartography_viewer_widget",
+]

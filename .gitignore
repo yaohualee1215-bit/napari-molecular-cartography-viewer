@@ -82,3 +82,11 @@ venv/
 
 # written by setuptools_scm
 **/_version.py
+
+# local history
+.Rhistory
+
+# helper packs/scripts (do not ship)
+napari-molecular-cartography-viewer_README_pack.zip
+napari-molecular-cartography-viewer_README_pack/
+write_readme.py
