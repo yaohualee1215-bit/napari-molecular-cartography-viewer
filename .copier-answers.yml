@@ -1,0 +1,18 @@
+# Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
+_commit: v2.0.1
+_src_path: gh:napari/napari-plugin-template
+display_name: Molecular Cartography Viewer
+email: liyaohua12345@foxmail.com
+full_name: Yaohua Li
+github_repository_url: provide later
+github_username_or_organization: yaohualee1215-bit
+include_reader_plugin: true
+include_sample_data_plugin: true
+include_widget_plugin: true
+include_writer_plugin: true
+install_dependabot: true
+install_precommit: true
+license: BSD-3
+module_name: napari_molecular_cartography_viewer
+plugin_name: napari-molecular-cartography-viewer
+short_description: A simple plugin to use Molecular Cartography Viewer within napari
