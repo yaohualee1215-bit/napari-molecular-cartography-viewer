@@ -1,9 +1,9 @@
 # napari-molecular-cartography-viewer
 
-A napari dock widget to **visualize exported molecular coordinate tables (CSV)** as transcript points.  
+A napari dock widget to **visualize exported molecular coordinate tables (CSV)** as transcript points.
 It supports **multi-gene overlay**, value thresholding, and an optional gray background layer showing all transcripts.
 
-> This plugin is intended for **exported/parsed coordinate tables** (CSV).  
+> This plugin is intended for **exported/parsed coordinate tables** (CSV).
 > It does **not** require or reverse-engineer any proprietary file formats.
 
 ## Compatibility
@@ -45,6 +45,17 @@ x,y,gene,val
 3. Click **Choose CSV…** and select your exported/parsed `.csv`.
 4. Search genes by substring, multi-select candidates, click **Add →**
 5. Click **Update display** to render selected genes.
+
+### New in v0.1.1
+
+- Added **Apply UI Color** button for active gene layers.
+- Workflow for manual color changes in napari:
+  1. Select a `GENE: ...` layer in the **Layers panel** (bottom-left).
+  2. Change **face color** in **layer controls** (top-left).
+  3. Click **Apply UI Color** in the plugin panel to apply the color to existing points.
+- Added transcript/point count display for the active/selected layer (shown in the lower-right status area).
+- Improved color update behavior for large transcript point layers.
+- Improved background transcript layer handling to reduce unnecessary heavy loading in common use.
 
 ## Options
 

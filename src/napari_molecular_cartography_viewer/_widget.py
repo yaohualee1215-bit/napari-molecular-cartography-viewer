@@ -180,7 +180,7 @@ class MolecularCartographyViewer(QWidget):
         p.addWidget(self.show_all_val)
 
         self.show_all_layer = QCheckBox("Show gray background layer")
-        self.show_all_layer.setChecked(True)
+        self.show_all_layer.setChecked(False)
         p.addWidget(self.show_all_layer)
 
         row3 = QHBoxLayout()
@@ -196,7 +196,9 @@ class MolecularCartographyViewer(QWidget):
 
         self.btn_update = QPushButton("Update display")
         self.btn_update.setStyleSheet("font-weight: bold;")
+        self.btn_apply_ui_color = QPushButton("Apply UI Color")
         root.addWidget(self.btn_update)
+        root.addWidget(self.btn_apply_ui_color)
 
         self.status = QLabel("Load a CSV to begin.")
         self.status.setStyleSheet("font-family: Menlo, monospace;")
@@ -208,6 +210,9 @@ class MolecularCartographyViewer(QWidget):
         self.btn_remove.clicked.connect(self.remove_selected)
         self.btn_clear.clicked.connect(self.clear_selected)
         self.btn_update.clicked.connect(self.update_display)
+        self.btn_apply_ui_color.clicked.connect(
+            self.apply_ui_color_to_active_layer
+        )
 
         # Disable controls until CSV loaded
         self._set_enabled(False)
@@ -308,23 +313,34 @@ class MolecularCartographyViewer(QWidget):
         self.val_thr.setRange(self.val_min, self.val_max)
         self.val_thr.setValue(self.val_min)
 
-        # Create/update gray background layer
-        coords_all = df[[ycol, xcol]].to_numpy(np.float32)
-        if self.ALL_NAME not in self.viewer.layers:
-            all_layer = self.viewer.add_points(
-                coords_all,
-                name=self.ALL_NAME,
-                size=1.5,
-                opacity=float(self.all_opacity.value()),
-                face_color="lightgray",
-            )
-            _force_no_border(all_layer)
+        # Background layer (All_transcripts): lazy-create only when requested
+        if self.show_all_layer.isChecked():
+            coords_all = df[[ycol, xcol]].to_numpy(np.float32)
+            if self.ALL_NAME not in self.viewer.layers:
+                all_layer = self.viewer.add_points(
+                    coords_all,
+                    name=self.ALL_NAME,
+                    size=1.5,
+                    opacity=float(self.all_opacity.value()),
+                    face_color="lightgray",
+                )
+                _force_no_border(all_layer)
+            else:
+                lyr = self.viewer.layers[self.ALL_NAME]
+                lyr.data = coords_all
+                lyr.visible = True
+                lyr.opacity = float(self.all_opacity.value())
+                _force_no_border(lyr)
         else:
-            lyr = self.viewer.layers[self.ALL_NAME]
-            lyr.data = coords_all
-            lyr.visible = self.show_all_layer.isChecked()
-            lyr.opacity = float(self.all_opacity.value())
-            _force_no_border(lyr)
+            # Remove stale background layer to save memory / avoid visual residue
+            if self.ALL_NAME in self.viewer.layers:
+                self.viewer.layers.remove(self.viewer.layers[self.ALL_NAME])
+
+        # startup cleanup: remove All_transcripts when checkbox is off
+        if (not self.show_all_layer.isChecked()) and (
+            self.ALL_NAME in self.viewer.layers
+        ):
+            self.viewer.layers.remove(self.viewer.layers[self.ALL_NAME])
 
         # Init candidates list
         self._all_candidates = list(self.unique_genes)
@@ -363,7 +379,7 @@ class MolecularCartographyViewer(QWidget):
             and self._gene_layers[g].name in self.viewer.layers
         ):
             lyr = self._gene_layers[g]
-            lyr.face_color = color
+            # lyr.face_color = color
             lyr.opacity = float(opacity)
             _force_no_border(lyr)
             return lyr
@@ -413,6 +429,53 @@ class MolecularCartographyViewer(QWidget):
             self.selected.item(i).text() for i in range(self.selected.count())
         ]
 
+    def apply_ui_color_to_active_layer(self):
+        """Apply napari UI current face color to all existing points in the active points layer."""
+        lyr = self.viewer.layers.selection.active
+        if lyr is None:
+            self.status.setText("No active layer selected.")
+            return
+        if not hasattr(lyr, "face_color") or not hasattr(lyr, "data"):
+            self.status.setText("Active layer is not a points layer.")
+            return
+
+        # 可选：只允许基因层，避免误改背景层（如需允许全部点层可删掉这段）
+        if hasattr(lyr, "name") and lyr.name == self.ALL_NAME:
+            self.status.setText(
+                "All_transcripts selected. Choose a gene layer instead."
+            )
+            return
+
+        try:
+            c = getattr(lyr, "current_face_color", None)
+            if c is None:
+                fc = getattr(lyr, "face_color", None)
+                if fc is not None and len(fc) > 0:
+                    c = fc[0]
+            if c is None:
+                self.status.setText("No UI face color found on active layer.")
+                return
+
+            # 内存友好：只有颜色真的变化才广播到所有点
+            need_apply = True
+            fc = getattr(lyr, "face_color", None)
+            if fc is not None and len(fc) > 0:
+                try:
+                    need_apply = not np.allclose(fc[0], c)
+                except (TypeError, ValueError):
+                    need_apply = True
+
+            if need_apply:
+                lyr.face_color = c
+                lyr.refresh()
+
+            npts = len(lyr.data) if hasattr(lyr, "data") else 0
+            self.status.setText(
+                f"Applied UI color to {lyr.name}; n_points={npts}"
+            )
+        except (AttributeError, TypeError, ValueError, RuntimeError) as e:
+            self.status.setText(f"Apply UI Color failed: {e}")
+
     # ---------- render ----------
     def update_display(self):
         if self.df is None or self.cols is None:
@@ -422,12 +485,29 @@ class MolecularCartographyViewer(QWidget):
             self.status.setText("No genes selected.")
             return
 
-        # background layer visibility
-        if self.ALL_NAME in self.viewer.layers:
-            bg = self.viewer.layers[self.ALL_NAME]
-            bg.visible = self.show_all_layer.isChecked()
-            bg.opacity = float(self.all_opacity.value())
-            _force_no_border(bg)
+        # background layer visibility / lazy-create
+        if self.show_all_layer.isChecked():
+            if self.ALL_NAME in self.viewer.layers:
+                bg = self.viewer.layers[self.ALL_NAME]
+                bg.visible = True
+                bg.opacity = float(self.all_opacity.value())
+                _force_no_border(bg)
+            else:
+                if self.df is not None and self.cols is not None:
+                    coords_all = self.df[[self.cols.y, self.cols.x]].to_numpy(
+                        np.float32
+                    )
+                    bg = self.viewer.add_points(
+                        coords_all,
+                        name=self.ALL_NAME,
+                        size=1.5,
+                        opacity=float(self.all_opacity.value()),
+                        face_color="lightgray",
+                    )
+                    _force_no_border(bg)
+        else:
+            if self.ALL_NAME in self.viewer.layers:
+                self.viewer.layers.remove(self.viewer.layers[self.ALL_NAME])
 
         base_size = float(self.base_size.value())
         opacity = float(self.opacity.value())
@@ -435,7 +515,7 @@ class MolecularCartographyViewer(QWidget):
         use_size_by_val = self.size_by_val.isChecked()
         ignore_thr = self.show_all_val.isChecked()
 
-        self._clear_gene_layers()
+        # self._clear_gene_layers()
 
         for i, g in enumerate(sel):
             self._cache_gene(g)
@@ -455,6 +535,21 @@ class MolecularCartographyViewer(QWidget):
                 g, color=color, base_size=base_size, opacity=opacity
             )
             lyr.data = coords2
+
+            # Apply the currently selected face color (from napari UI) to all existing points.
+            # In napari Points (direct mode), changing face color in the UI may only update
+            # current_face_color, not the existing face_color array.
+            try:
+                c = getattr(lyr, "current_face_color", None)
+                if c is None:
+                    fc = getattr(lyr, "face_color", None)
+                    if fc is not None and len(fc) > 0:
+                        c = fc[0]
+                if c is not None:
+                    lyr.face_color = c
+            except (AttributeError, TypeError, ValueError):
+                pass
+
             _force_no_border(lyr)
 
             if use_size_by_val and len(vals2) > 0:
